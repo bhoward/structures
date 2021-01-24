@@ -1,8 +1,7 @@
 package structures
 
 import BoolSyntax._
-import org.scalacheck.Arbitrary
-import org.scalacheck.Prop
+import org.scalacheck.{Arbitrary, Prop}
 import org.scalacheck.Prop.{forAll, propBoolean, all}
 
 trait Predicate[A]:
@@ -17,56 +16,67 @@ trait Endorelation[A] extends Relation[A, A]
 
 trait Preorder[A] extends Endorelation[A]:
   extension (a: A)
-    def ≲(b: A): Boolean = relates(a, b)
-    def ≳(b: A): Boolean = relates(b, a)
-    def ≅(b: A): Boolean = (a ≲ b) /\ (b ≲ a)
+    def pre_<=(b: A): Boolean = relates(a, b)
+    def pre_>=(b: A): Boolean = (b pre_<= a)
+    def pre_=~(b: A): Boolean = (a pre_<= b) /\ (b pre_<= a)
 
 object Preorder {
-  def laws[A : Arbitrary](using Preorder[A]): Prop = all(
-    "reflexive" |: forAll { (a: A) => a ≲ a },
+  def laws[A](using r: Preorder[A])(using Arbitrary[A]): Prop = all(
+    "reflexive" |: forAll { (a: A) => a pre_<= a },
     "transitive" |: forAll { (a: A, b: A, c: A) =>
-      ((a ≲ b) /\ (b ≲ c)) ==> (a ≲ c)
+      ((a pre_<= b) /\ (b pre_<= c)) ==> (a pre_<= c)
     }
   )
 }
 
-trait Equivalence[A] extends Preorder[A]
+trait Equivalence[A] extends Preorder[A]:
+  extension (a: A)
+    def eq_==(b: A): Boolean = relates(a, b)
 
 object Equivalence {
-  def laws[A : Arbitrary](using Equivalence[A]): Prop = all(
+  def laws[A](using Equivalence[A])(using Arbitrary[A]): Prop = all(
     Preorder.laws,
     "symmetric" |: forAll { (a: A, b: A) =>
-      (a ≲ b) ==> (b ≲ a)
+      (a eq_== b) ==> (b eq_== a)
     }
   )
 }
 
 trait PartialOrder[A] extends Preorder[A]:
   extension (a: A)
-    def ≤(b: A): Boolean = (a ≲ b)
-    def ≥(b: A): Boolean = (a ≳ b)
+    def po_<=(b: A): Boolean = (a pre_<= b)
+    def po_>=(b: A): Boolean = (a pre_>= b)
+    def po_=~(b: A): Boolean = (a pre_=~ b)
 
 object PartialOrder {
-  def laws[A : Arbitrary](using PartialOrder[A]): Prop = all(
+  def laws[A](using PartialOrder[A])(using Arbitrary[A]): Prop = all(
     Preorder.laws,
     "antisymmetric" |: forAll { (a: A, b: A) =>
-      (a ≅ b) ==> (a == b)
+      (a po_=~ b) ==> (a == b)
     }
   )
 }
 
-trait TotalPreorder[A] extends Preorder[A]
+trait TotalPreorder[A] extends Preorder[A]:
+  extension (a: A)
+    def tp_<=(b: A): Boolean = (a pre_<= b)
+    def tp_>=(b: A): Boolean = (a pre_>= b)
+    def tp_=~(b: A): Boolean = (a pre_=~ b)
 
 object TotalPreorder {
-  def laws[A : Arbitrary](using TotalPreorder[A]): Prop = all(
+  def laws[A](using TotalPreorder[A])(using Arbitrary[A]): Prop = all(
     Preorder.laws,
     "total" |: forAll { (a: A, b: A) =>
-      (a ≲ b) \/ (b ≲ a)
+      (a tp_<= b) \/ (b tp_<= a)
     }
   )
 }
 
-trait TotalOrder[A] extends TotalPreorder[A], PartialOrder[A]
+trait TotalOrder[A] extends TotalPreorder[A], PartialOrder[A]:
+  extension (a: A)
+    def to_<=(b: A): Boolean = (a tp_<= b)
+    def to_>=(b: A): Boolean = (a tp_>= b)
+    def to_=~(b: A): Boolean = (a tp_=~ b)
 
 object TotalOrder {
   def laws[A](using TotalOrder[A])(using Arbitrary[A]): Prop = all(
@@ -77,13 +87,13 @@ object TotalOrder {
 
 trait StrictOrder[A] extends Endorelation[A]:
   extension (a: A)
-    def ≨(b: A): Boolean = relates(a, b)
-    def ≩(b: A): Boolean = relates(b, a)
+    def so_<(b: A): Boolean = relates(a, b)
+    def so_>(b: A): Boolean = (b so_< a)
 
 object StrictOrder {
-  def laws[A : Arbitrary](using StrictOrder[A]): Prop = all(
-    "irreflexive" |: forAll { (a: A) => !(a ≨ a) },
-    "asymmetric" |: forAll { (a: A, b: A) => !((a ≨ b) /\ (b ≨ a))
+  def laws[A](using StrictOrder[A])(using Arbitrary[A]): Prop = all(
+    "irreflexive" |: forAll { (a: A) => !(a so_< a) },
+    "asymmetric" |: forAll { (a: A, b: A) => !((a so_< b) /\ (b so_< a))
     }
   )
 }
@@ -104,12 +114,13 @@ object doubleTotalOrder extends TotalOrder[Double] {
   override def relates(x: Double, y: Double): Boolean = x <= y
 }
 
-class IntDiv(val value: Int) extends AnyVal:
-  override def toString: String = value.toString
+case class IntDiv(val value: Int) extends AnyVal
 
-given arbIntDiv: Arbitrary[IntDiv] =
-  Arbitrary(for n <- Arbitrary.arbitrary[Int] yield IntDiv(n))
+object IntDiv {
+  given Arbitrary[IntDiv] =
+    Arbitrary(for n <- Arbitrary.arbitrary[Int] yield IntDiv(n))
 
-given intDivPreorder: Preorder[IntDiv] with
-  override def relates(m: IntDiv, n: IntDiv): Boolean =
-    if m.value == 0 then n.value == 0 else (n.value % m.value) == 0
+  given Preorder[IntDiv] with
+    override def relates(m: IntDiv, n: IntDiv): Boolean =
+      if m.value == 0 then n.value == 0 else (n.value % m.value) == 0
+}

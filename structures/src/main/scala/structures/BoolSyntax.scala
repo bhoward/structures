@@ -5,4 +5,4 @@ object BoolSyntax:
     def ==>(q: => Boolean): Boolean = (p <= q)
     def /\ (q: => Boolean): Boolean = (p && q)
     def \/ (q: => Boolean): Boolean = (p || q)
-    def =~ (q: => Boolean): Boolean = (p == q)
+    def ===(q: => Boolean): Boolean = (p == q)
