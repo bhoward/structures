@@ -89,7 +89,7 @@ object StrictOrder {
 }
 
 // PER, functions, partial functions, etc.?
-// define instances for common examples and constructions
+// define more instances for common examples and constructions
 
 given intTotalOrder: TotalOrder[Int] with
   override def relates(m: Int, n: Int): Boolean = m <= n
@@ -100,8 +100,16 @@ given intStrictOrder: StrictOrder[Int] with
 given stringTotalOrder: TotalOrder[String] with
   override def relates(s: String, t: String): Boolean = s <= t
 
-object Foo {
-  val doubleTotalOrder = new TotalOrder[Double] {
-    override def relates(x: Double, y: Double): Boolean = x <= y
-  }
+object doubleTotalOrder extends TotalOrder[Double] {
+  override def relates(x: Double, y: Double): Boolean = x <= y
 }
+
+class IntDiv(val value: Int) extends AnyVal:
+  override def toString: String = value.toString
+
+given arbIntDiv: Arbitrary[IntDiv] =
+  Arbitrary(for n <- Arbitrary.arbitrary[Int] yield IntDiv(n))
+
+given intDivPreorder: Preorder[IntDiv] with
+  override def relates(m: IntDiv, n: IntDiv): Boolean =
+    if m.value == 0 then n.value == 0 else (n.value % m.value) == 0
