@@ -14,33 +14,47 @@ trait Relation[A, B] extends Predicate[(A, B)]:
 
 trait Endorelation[A] extends Relation[A, A]
 
-trait Preorder[A] extends Endorelation[A]:
+trait TransitiveRelation[A] extends Endorelation[A]
+
+object TransitiveRelation:
+  def laws[A](using r: TransitiveRelation[A])(using Arbitrary[A]): Prop = all(
+    "transitive" |: forAll { (a: A, b: A, c: A) =>
+      (r.relates(a, b) /\ r.relates(b, c)) ==> r.relates(a, c)
+    }
+  )
+
+trait Preorder[A] extends TransitiveRelation[A]:
   extension (a: A)
     def pre_<=(b: A): Boolean = relates(a, b)
     def pre_>=(b: A): Boolean = (b pre_<= a)
     def pre_=~(b: A): Boolean = (a pre_<= b) /\ (b pre_<= a)
 
-object Preorder {
+object Preorder:
   def laws[A](using r: Preorder[A])(using Arbitrary[A]): Prop = all(
-    "reflexive" |: forAll { (a: A) => a pre_<= a },
-    "transitive" |: forAll { (a: A, b: A, c: A) =>
-      ((a pre_<= b) /\ (b pre_<= c)) ==> (a pre_<= c)
+    TransitiveRelation.laws,
+    "reflexive" |: forAll { (a: A) => a pre_<= a }
+  )
+
+trait PartialEquivalence[A] extends TransitiveRelation[A]:
+  extension (a: A)
+    def per_==(b: A): Boolean = relates(a, b)
+
+object PartialEquivalence:
+  def laws[A](using r: PartialEquivalence[A])(using Arbitrary[A]): Prop = all(
+    TransitiveRelation.laws,
+    "symmetric" |: forAll { (a: A, b: A) =>
+      (a per_== b) ==> (b per_== a)
     }
   )
-}
-
-trait Equivalence[A] extends Preorder[A]:
+trait Equivalence[A] extends Preorder[A], PartialEquivalence[A]:
   extension (a: A)
     def eq_==(b: A): Boolean = relates(a, b)
 
-object Equivalence {
+object Equivalence:
   def laws[A](using Equivalence[A])(using Arbitrary[A]): Prop = all(
     Preorder.laws,
-    "symmetric" |: forAll { (a: A, b: A) =>
-      (a eq_== b) ==> (b eq_== a)
-    }
+    PartialEquivalence.laws
   )
-}
 
 trait PartialOrder[A] extends Preorder[A]:
   extension (a: A)
@@ -48,79 +62,120 @@ trait PartialOrder[A] extends Preorder[A]:
     def po_>=(b: A): Boolean = (a pre_>= b)
     def po_=~(b: A): Boolean = (a pre_=~ b)
 
-object PartialOrder {
+object PartialOrder:
   def laws[A](using PartialOrder[A])(using Arbitrary[A]): Prop = all(
     Preorder.laws,
     "antisymmetric" |: forAll { (a: A, b: A) =>
       (a po_=~ b) ==> (a == b)
     }
   )
-}
 
 trait TotalPreorder[A] extends Preorder[A]:
   extension (a: A)
     def tp_<=(b: A): Boolean = (a pre_<= b)
     def tp_>=(b: A): Boolean = (a pre_>= b)
     def tp_=~(b: A): Boolean = (a pre_=~ b)
+    def tp_<(b: A): Boolean = !(b pre_<= a)
+    def tp_>(b: A): Boolean = !(a pre_<= b)
 
-object TotalPreorder {
+object TotalPreorder:
   def laws[A](using TotalPreorder[A])(using Arbitrary[A]): Prop = all(
     Preorder.laws,
-    "total" |: forAll { (a: A, b: A) =>
+    "connex" |: forAll { (a: A, b: A) =>
       (a tp_<= b) \/ (b tp_<= a)
     }
   )
-}
 
 trait TotalOrder[A] extends TotalPreorder[A], PartialOrder[A]:
   extension (a: A)
     def to_<=(b: A): Boolean = (a tp_<= b)
     def to_>=(b: A): Boolean = (a tp_>= b)
     def to_=~(b: A): Boolean = (a tp_=~ b)
+    def to_<(b: A): Boolean = (a tp_< b)
+    def to_>(b: A): Boolean = (a tp_< b)
 
-object TotalOrder {
+object TotalOrder:
   def laws[A](using TotalOrder[A])(using Arbitrary[A]): Prop = all(
     TotalPreorder.laws,
     PartialOrder.laws
   )
-}
 
-trait StrictOrder[A] extends Endorelation[A]:
+trait StrictPartialOrder[A] extends TransitiveRelation[A]:
   extension (a: A)
-    def so_<(b: A): Boolean = relates(a, b)
-    def so_>(b: A): Boolean = (b so_< a)
+    def spo_<(b: A): Boolean = relates(a, b)
+    def spo_>(b: A): Boolean = (b spo_< a)
 
-object StrictOrder {
-  def laws[A](using StrictOrder[A])(using Arbitrary[A]): Prop = all(
-    "irreflexive" |: forAll { (a: A) => !(a so_< a) },
-    "asymmetric" |: forAll { (a: A, b: A) => !((a so_< b) /\ (b so_< a))
+object StrictPartialOrder:
+  def laws[A](using StrictPartialOrder[A])(using Arbitrary[A]): Prop = all(
+    TransitiveRelation.laws,
+    "irreflexive" |: forAll { (a: A) => !(a spo_< a) },
+    "asymmetric" |: forAll { (a: A, b: A) =>
+      !((a spo_< b) /\ (b spo_< a))
     }
   )
-}
 
-// PER, functions, partial functions, etc.?
+trait StrictWeakOrder[A] extends StrictPartialOrder[A]:
+  extension (a: A)
+    def swo_<(b: A): Boolean = (a spo_< b)
+    def swo_>(b: A): Boolean = (a spo_> b)
+    def swo_#(b: A): Boolean = !((a spo_< b) \/ (b spo_< a)) // incomparable
+
+object StrictWeakOrder:
+  def laws[A](using StrictWeakOrder[A])(using Arbitrary[A]): Prop = all(
+    StrictPartialOrder.laws,
+    "transitive incomparability" |: forAll { (a: A, b: A, c: A) =>
+      ((a swo_# b) /\ (b swo_# c)) ==> (a swo_# c)
+    }
+  )
+
+// functions, partial functions, etc.?
 // define more instances for common examples and constructions
+
+given boolTotalOrder: TotalOrder[Boolean] with
+  override def relates(p: Boolean, q: Boolean): Boolean = p <= q
 
 given intTotalOrder: TotalOrder[Int] with
   override def relates(m: Int, n: Int): Boolean = m <= n
 
-given intStrictOrder: StrictOrder[Int] with
+given intStrictWeakOrder: StrictWeakOrder[Int] with
   override def relates(m: Int, n: Int): Boolean = m < n
 
 given stringTotalOrder: TotalOrder[String] with
   override def relates(s: String, t: String): Boolean = s <= t
 
-object doubleTotalOrder extends TotalOrder[Double] {
+object doubleTotalOrder extends TotalOrder[Double]:
   override def relates(x: Double, y: Double): Boolean = x <= y
-}
 
 case class IntDiv(val value: Int) extends AnyVal
 
-object IntDiv {
+object IntDiv:
   given Arbitrary[IntDiv] =
     Arbitrary(for n <- Arbitrary.arbitrary[Int] yield IntDiv(n))
 
   given Preorder[IntDiv] with
     override def relates(m: IntDiv, n: IntDiv): Boolean =
       if m.value == 0 then n.value == 0 else (n.value % m.value) == 0
-}
+
+given pairPreorder[A, B](using Preorder[A], Preorder[B]): Preorder[(A, B)] with
+  override def relates(p1: (A, B), p2: (A, B)): Boolean =
+    (p1._1 pre_<= p2._1) /\ (p1._2 pre_<= p2._2)
+
+// The following functions demonstrate the equivalence between partial orders
+// and strict partial orders:
+def po2spo[A](po: PartialOrder[A]): StrictPartialOrder[A] = new StrictPartialOrder[A]:
+  given PartialOrder[A] = po
+  override def relates(a: A, b: A): Boolean = (a po_<= b) /\ (a != b)
+
+def spo2po[A](spo: StrictPartialOrder[A]): PartialOrder[A] = new PartialOrder[A]:
+  given StrictPartialOrder[A] = spo
+  override def relates(a: A, b: A): Boolean = (a spo_< b) \/ (a == b)
+
+// The following functions demonstrate the equivalence between total preorders
+// and strict weak orders:
+def tp2swo[A](tp: TotalPreorder[A]): StrictWeakOrder[A] = new StrictWeakOrder[A]:
+  given TotalPreorder[A] = tp
+  override def relates(a: A, b: A): Boolean = !(b tp_<= a)
+
+def swo2tp[A](swo: StrictWeakOrder[A]): TotalPreorder[A] = new TotalPreorder[A]:
+  given StrictWeakOrder[A] = swo
+  override def relates(a: A, b: A): Boolean = !(b swo_< a)
