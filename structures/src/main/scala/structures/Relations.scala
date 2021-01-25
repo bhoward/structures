@@ -4,16 +4,30 @@ import BoolSyntax._
 import org.scalacheck.{Arbitrary, Prop}
 import org.scalacheck.Prop.{forAll, propBoolean, all}
 
+/**
+ * A Predicate on A is specified by its characteristic function
+ * from A to Boolean.
+ */
 trait Predicate[A]:
   def holdsAt(a: A): Boolean
 
+/**
+ * A (binary) Relation from A to B is a predicate on pairs of type (A, B).
+ */
 trait Relation[A, B] extends Predicate[(A, B)]:
   def relates(a: A, b: B): Boolean
   override def holdsAt(p: (A, B)) = p match
     case (a, b) => relates(a, b)
 
+/**
+ * An Endorelation on A is a binary relation from A to A.
+ */
 trait Endorelation[A] extends Relation[A, A]
 
+/**
+ * A TransitiveRelation on A satisfies the transitivity law:
+ * if a R b and b R c, then a R c
+ */
 trait TransitiveRelation[A] extends Endorelation[A]
 
 object TransitiveRelation:
@@ -23,6 +37,9 @@ object TransitiveRelation:
     }
   )
 
+/**
+ * A Preorder on A is a transitive and reflexive (a R a) relation.
+ */
 trait Preorder[A] extends TransitiveRelation[A]:
   extension (a: A)
     def pre_<=(b: A): Boolean = relates(a, b)
@@ -35,6 +52,11 @@ object Preorder:
     "reflexive" |: forAll { (a: A) => a pre_<= a }
   )
 
+/**
+ * A PartialEquivalence on A is a symmetric (if a R b, then b R a) and
+ * transitive relation. It is like an equivalence relation, except some
+ * elements might not be related to anything (not even themselves).
+ */
 trait PartialEquivalence[A] extends TransitiveRelation[A]:
   extension (a: A)
     def per_==(b: A): Boolean = relates(a, b)
@@ -46,6 +68,12 @@ object PartialEquivalence:
       (a per_== b) ==> (b per_== a)
     }
   )
+
+/**
+ * An Equivalence on A is a reflexive, symmetric, and transitive relation.
+ * It is similar to equality, except there may be multiple elements that
+ * are all in the same equivalence class (all related to each other).
+ */
 trait Equivalence[A] extends Preorder[A], PartialEquivalence[A]:
   extension (a: A)
     def eq_==(b: A): Boolean = relates(a, b)
@@ -56,6 +84,10 @@ object Equivalence:
     PartialEquivalence.laws
   )
 
+/**
+ * A PartialOrder on A is a reflexive, antisymmetric (can't have both
+ * a <= b and b <= a for distinct a, b), and transitive relation.
+ */
 trait PartialOrder[A] extends Preorder[A]:
   extension (a: A)
     def po_<=(b: A): Boolean = (a pre_<= b)
@@ -70,6 +102,10 @@ object PartialOrder:
     }
   )
 
+/**
+ * A TotalPreorder on A is a reflexive and transitive relation that also
+ * satisfies the connexity property (either a <= b or b <= a).
+ */
 trait TotalPreorder[A] extends Preorder[A]:
   extension (a: A)
     def tp_<=(b: A): Boolean = (a pre_<= b)
@@ -86,6 +122,10 @@ object TotalPreorder:
     }
   )
 
+/**
+ * A TotalOrder on A is a reflexive, antisymmetric, transitive, connex
+ * relation.
+ */
 trait TotalOrder[A] extends TotalPreorder[A], PartialOrder[A]:
   extension (a: A)
     def to_<=(b: A): Boolean = (a tp_<= b)
@@ -100,6 +140,10 @@ object TotalOrder:
     PartialOrder.laws
   )
 
+/**
+ * A StrictPartialOrder on A is an irreflexive (not a R a), asymmetric
+ * (not both a R b and b R a), transitive relation.
+ */
 trait StrictPartialOrder[A] extends TransitiveRelation[A]:
   extension (a: A)
     def spo_<(b: A): Boolean = relates(a, b)
@@ -114,6 +158,10 @@ object StrictPartialOrder:
     }
   )
 
+/**
+ * A StrictWeakOrder on A is a strict partial order where incomparability is
+ * transitive -- that is, if a # b and b # c, then a # c.
+ */
 trait StrictWeakOrder[A] extends StrictPartialOrder[A]:
   extension (a: A)
     def swo_<(b: A): Boolean = (a spo_< b)
@@ -128,6 +176,24 @@ object StrictWeakOrder:
     }
   )
 
+/**
+ * A StrictTotalOrder on A is a strict weak order that is also trichotomous
+ * -- that is, exactly one of a < b, a == b, and a > b holds.
+ */
+trait StrictTotalOrder[A] extends StrictWeakOrder[A]:
+  extension (a: A)
+    def sto_<(b: A): Boolean = (a swo_< b)
+    def sto_>(b: A): Boolean = (a swo_> b)
+    def sto_#(b: A): Boolean = (a swo_# b)
+
+object StrictTotalOrder:
+  def laws[A](using StrictTotalOrder[A])(using Arbitrary[A]): Prop = all(
+    StrictWeakOrder.laws,
+    "trichotomous" |: forAll { (a: A, b: A) =>
+      (a sto_# b) ==> (a == b)
+    }
+  )
+
 // functions, partial functions, etc.?
 // define more instances for common examples and constructions
 
@@ -137,7 +203,7 @@ given boolTotalOrder: TotalOrder[Boolean] with
 given intTotalOrder: TotalOrder[Int] with
   override def relates(m: Int, n: Int): Boolean = m <= n
 
-given intStrictWeakOrder: StrictWeakOrder[Int] with
+given intStrictTotalOrder: StrictTotalOrder[Int] with
   override def relates(m: Int, n: Int): Boolean = m < n
 
 given stringTotalOrder: TotalOrder[String] with
@@ -179,3 +245,13 @@ def tp2swo[A](tp: TotalPreorder[A]): StrictWeakOrder[A] = new StrictWeakOrder[A]
 def swo2tp[A](swo: StrictWeakOrder[A]): TotalPreorder[A] = new TotalPreorder[A]:
   given StrictWeakOrder[A] = swo
   override def relates(a: A, b: A): Boolean = !(b swo_< a)
+
+// The following functions demonstrate the equivalence between total orders and
+// strict total orders:
+def to2sto[A](to: TotalOrder[A]): StrictTotalOrder[A] = new StrictTotalOrder[A]:
+  given TotalOrder[A] = to
+  override def relates(a: A, b: A): Boolean = !(b to_<= a)
+
+def sto2to[A](sto: StrictTotalOrder[A]): TotalOrder[A] = new TotalOrder[A]:
+  given StrictTotalOrder[A] = sto
+  override def relates(a: A, b: A): Boolean = !(b sto_< a)

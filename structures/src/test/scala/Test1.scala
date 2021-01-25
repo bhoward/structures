@@ -11,11 +11,15 @@ class Test1 {
     TotalOrder.laws[Int].check()
     TotalOrder.laws[String].check()
     TotalOrder.laws(using doubleTotalOrder).check()
-    StrictWeakOrder.laws[Int].check()
+    StrictTotalOrder.laws[Int].check()
+
     StrictPartialOrder.laws(using po2spo(intTotalOrder)).check()
-    PartialOrder.laws(using spo2po(intStrictWeakOrder)).check()
+    PartialOrder.laws(using spo2po(intStrictTotalOrder)).check()
     StrictWeakOrder.laws(using tp2swo(intTotalOrder)).check()
-    TotalPreorder.laws(using swo2tp(intStrictWeakOrder)).check()
+    TotalPreorder.laws(using swo2tp(intStrictTotalOrder)).check()
+    StrictTotalOrder.laws(using to2sto(intTotalOrder)).check()
+    TotalOrder.laws(using sto2to(intStrictTotalOrder)).check()
+    
     Preorder.laws[IntDiv].check()
     Preorder.laws[(Int, String)].check()
   }
